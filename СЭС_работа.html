@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Солнечная электростанция: от фотона до сети</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:#06122b;color:#fff;font:15px/1.35 "SF Pro Display",Inter,system-ui,sans-serif;user-select:none}
+canvas{position:fixed;inset:0;width:100%;height:100%}
+.g{position:fixed;background:linear-gradient(135deg,rgba(255,255,255,.22),rgba(255,255,255,.07));backdrop-filter:blur(18px) saturate(1.7);-webkit-backdrop-filter:blur(18px) saturate(1.7);border:1px solid rgba(255,255,255,.4);border-radius:22px;box-shadow:inset 0 1px 1px rgba(255,255,255,.6),inset 0 -10px 24px rgba(255,255,255,.05),0 12px 40px rgba(0,10,40,.45);text-shadow:0 1px 4px rgba(0,0,30,.6)}
+#top{left:12px;right:12px;top:12px;height:54px;display:flex;align-items:center;gap:8px;padding:0 16px}
+h1{font-size:19px;margin:0 auto 0 0;white-space:nowrap}
+#chips{display:flex;gap:6px;margin-right:8px}
+button{font:inherit;color:#fff;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.4);border-radius:14px;padding:7px 12px;cursor:pointer;transition:.2s}
+button:hover,button.on{background:rgba(255,190,60,.5);box-shadow:0 0 16px rgba(255,190,60,.6)}
+#side{left:12px;top:76px;bottom:108px;width:250px;padding:12px 16px;display:flex;flex-direction:column;justify-content:space-between}
+label{font-size:13px;display:flex;justify-content:space-between}
+input{width:100%;height:26px;accent-color:#ffc23d;margin:0}
+#cap{left:274px;right:12px;top:76px;height:44px;padding:0 20px;display:flex;align-items:center;font-size:16px}
+#stage{left:274px;right:12px;top:128px;bottom:108px;border-radius:28px}
+#wid{left:12px;right:12px;bottom:12px;height:88px;display:flex;gap:8px;padding:8px 12px;align-items:center}
+.w{flex:1;text-align:center}.w b{display:block;font-size:24px;white-space:nowrap}.w small{opacity:.85;font-size:12px}
+#card{right:28px;top:140px;width:340px;padding:16px 20px;display:none}
+#card h3{margin:0 0 6px;color:#ffd36b}#card p{margin:0}
+</style></head><body>
+<canvas id="c"></canvas><div class="g" id="stage"></div><canvas id="f"></canvas>
+<div class="g" id="top"><h1>☀ Солнечная электростанция</h1><div id="chips"></div><button id="tc">Панель</button><button id="ts">Накопитель</button><button id="demo">▶ Автодемо</button><button id="pause"></button><button id="reset">Сброс</button><button id="lab">Подписи</button></div>
+<div class="g" id="side"></div><div class="g" id="cap"></div><div class="g" id="wid"></div>
+<div class="g" id="card"><h3></h3><p></p></div>
+<script>
+// ===== Canvas: фон (небо, поле) и передний план (схема) =====
+const $=s=>document.querySelector(s),cb=$('#c'),cf=$('#f'),bg=cb.getContext('2d'),fg=cf.getContext('2d');
+let X=bg,W,H,D=Math.min(devicePixelRatio||1,2);
+function rs(){W=innerWidth;H=innerHeight;[cb,cf].forEach(c=>{c.width=W*D;c.height=H*D;c.getContext('2d').setTransform(D,0,0,D,0,0)})}
+addEventListener('resize',rs);rs();
+const mx=(a,b,t)=>a+(b-a)*t,cl01=v=>Math.max(0,Math.min(1,v)),rnd=Math.random;
+const C=(a,b,t)=>a.map((v,i)=>v+(b[i]-v)*t),rgb=a=>`rgb(${a.map(Math.round)})`;
+const hm=t=>{t=(t%24+24)%24;return String(t|0).padStart(2,'0')+':'+String(t%1*60|0).padStart(2,'0')};
+// ===== Тексты =====
+const ST=['Шаг 1. Фотоны падают на стекло под углом, зависящим от времени суток; ~4 % отражается, просветляющее покрытие снижает потери.',
+'Шаг 2. Свет проходит слои: стекло → плёнка EVA → просветляющее покрытие → n‑кремний → p‑n переход → p‑кремний → задний контакт.',
+'Шаг 3. Фотон рвёт связь Si–Si: появляются свободный электрон и «дырка» (справа — кристалл крупно).',
+'Шаг 4. Электрическое поле p‑n перехода разводит заряды: электроны уходят в n‑слой, дырки — в p‑слой.',
+'Шаг 5. Электроны идут по контактам через нагрузку (лампу) и возвращаются в задний контакт — цепь замкнута, ток течёт навстречу им.',
+'Шаг 6. Инвертор превращает постоянный ток в переменный, трансформатор повышает напряжение и отдаёт энергию в сеть.',
+'Накопитель, день: излишек электричества греет известняк: CaCO₃ → CaO + CO₂. Энергия запасается в химических связях.',
+'Накопитель, ночь: CaO + CO₂ → CaCO₃ + тепло. Тепло греет теплообменник → пар → электричество для потребителей.'];
+const INFO={glass:['Защитное стекло','Закалённое стекло защищает от града и погоды, пропускает ~96 % света.'],
+eva:['Плёнка EVA','Прозрачный полимер: приклеивает стекло к элементу и защищает от влаги.'],
+arc:['Просветляющее покрытие','Тонкая плёнка нитрида кремния: без неё кремний отражал бы ~30 % света.'],
+n:['n‑слой кремния','Тонкий слой с примесью фосфора: много свободных электронов.'],
+pn:['p‑n переход','Граница слоёв. Здесь возникает встроенное электрическое поле: оно толкает электроны вверх, в n‑слой, а дырки вниз, в p‑слой.'],
+p:['p‑слой кремния','Толстый слой с примесью бора, избыток «дырок». Здесь поглощается большая часть света.'],
+back:['Задний контакт','Алюминиевый слой (плюс элемента). Сюда возвращаются электроны из цепи и соединяются с дырками.'],
+finger:['Контакты‑«шины»','Тонкие серебряные дорожки собирают электроны с поверхности и почти не затеняют элемент.'],
+lamp:['Нагрузка','Электроны проходят по цепи и совершают работу: лампа светит тем ярче, чем больше мощность. Условный ток направлен от «+» к «−», навстречу электронам.'],
+lat:['Кристалл кремния','Каждый атом Si связан с четырьмя соседями. Фотон с энергией выше ~1,1 эВ рвёт связь: электрон свободен, остаётся дырка.'],
+cell:['Ячейка','Одна ячейка даёт около 0,6 В; в панели их 60–72, соединённых последовательно.'],
+panel:['Панель','Напряжение ячеек складывается: около 30–40 В на панель.'],
+string:['Строка панелей','Панели в ряд: напряжение растёт с их числом, ток зависит от освещённости.'],
+inv:['Инвертор','Превращает постоянный ток (DC) в переменный 50 Гц (AC) и держит панели в точке максимальной мощности.'],
+trans:['Трансформатор','Повышает напряжение, чтобы отдавать мощность в сеть с малыми потерями.'],
+grid:['Сеть','Электричество идёт потребителям. Если выработка больше нагрузки, излишек уходит в накопитель.'],
+reac:['Реактор с известняком','Днём излишек электричества нагревает CaCO₃ до ~900 °C: он распадается на CaO и CO₂, энергия запасается в связях. Ночью обратная реакция выделяет тепло. Известняк дёшев, негорюч и хранится годами без потерь.'],
+co2:['Резервуар CO₂','Газ хранится отдельно и ночью возвращается в реактор. Цикл замкнут, углерод не выбрасывается.'],
+hx:['Теплообменник','Тепло реакции греет воду → пар → турбина → электричество ночью.']};
+// ===== Состояние =====
+const DEF={t:11,cl:10,tilt:35,tp:35,dust:10,n:20,load:300,sp:1},CAP=4;
+let S={...DEF},tab='c',step=1,paused=false,labels=true,demo=-1,dT=0,E=2,day=0,clock=0,Tr=200,M={},hits=[],ps=[],fl=[],acc=0,geo=null;
+const stars=Array.from({length:140},()=>[rnd(),rnd(),rnd()]);
+const chunks=Array.from({length:30},()=>[rnd(),rnd(),.05+rnd()*.05,rnd()*6]).sort((a,b)=>b[1]-a[1]);
+const DM=[1,2,3,4,5,6].map(n=>({tab:'c',n,t:n==1?11.3:null,d:5})).concat([{tab:'s',t:11,e:1.2,d:9},{tab:'s',t:21,e:3,d:9}]);
+// ===== Интерфейс =====
+const SL=[['t','Время суток',0,24,.1],['cl','Облачность, %',0,100,1],['tilt','Наклон панелей, °',0,90,1],['tp','Температура панели, °C',0,90,1],['dust','Запылённость, %',0,100,1],['n','Панелей в строке',4,30,1],['load','Нагрузка, кВт',0,1000,10],['sp','Скорость анимации',0,3,.1]];
+$('#side').innerHTML=SL.map(([k,l,a,b,s])=>`<div><label>${l}<b id="v${k}"></b></label><input type=range id="s${k}" min=${a} max=${b} step=${s}></div>`).join('');
+SL.forEach(([k])=>{$('#s'+k).oninput=e=>{S[k]=+e.target.value;sync()}});
+function sync(){SL.forEach(([k])=>{$('#s'+k).value=S[k];$('#v'+k).textContent=k=='t'?hm(S.t):S[k]})}
+$('#chips').innerHTML=[1,2,3,4,5,6].map(i=>`<button data-i="${i}">${i}</button>`).join('');
+$('#wid').innerHTML=[['Время','wt'],['Солнце над горизонтом','we'],['Мощность','wp'],['Напряжение / ток','wv'],['КПД панели','wn'],['Выработка за день','wd'],['Накопитель','ws']].map(([l,i])=>`<div class="w"><small>${l}</small><b id="${i}"></b></div>`).join('');
+const set=(i,v)=>{const el=document.getElementById(i);if(el.textContent!==v)el.textContent=v};
+function ui(){$('#tc').classList.toggle('on',tab=='c');$('#ts').classList.toggle('on',tab=='s');document.querySelectorAll('#chips button').forEach(b=>b.classList.toggle('on',tab=='c'&&+b.dataset.i==step));$('#lab').classList.toggle('on',labels);$('#demo').classList.toggle('on',demo>=0);$('#pause').textContent=paused?'▶ Пуск':'⏸ Пауза'}
+function apply(){if(demo>=DM.length){demo=-1;ui();return}const d=DM[demo];tab=d.tab;if(d.n)step=d.n;if(d.t!=null)S.t=d.t;if(d.e!=null)E=d.e;dT=d.d;ui();sync()}
+$('#tc').onclick=()=>{tab='c';demo=-1;ui()};$('#ts').onclick=()=>{tab='s';demo=-1;ui()};
+$('#chips').onclick=e=>{const i=e.target.dataset.i;if(i){step=+i;tab='c';demo=-1;ui()}};
+$('#demo').onclick=()=>{S.cl=10;S.load=300;S.sp=1;paused=false;demo=0;apply()};
+$('#pause').onclick=()=>{paused=!paused;ui()};
+$('#reset').onclick=()=>{S={...DEF};E=2;day=0;demo=-1;step=1;tab='c';paused=false;ps.length=0;sync();ui()};
+$('#lab').onclick=()=>{labels=!labels;ui()};
+const fnd=e=>{for(let i=hits.length;i--;){const h=hits[i];if(e.clientX>=h[1]&&e.clientX<=h[1]+h[3]&&e.clientY>=h[2]&&e.clientY<=h[2]+h[4])return h[0]}};
+cf.onmousemove=e=>cf.style.cursor=fnd(e)?'pointer':'';
+cf.onclick=e=>{const k=fnd(e),c=$('#card');if(k){c.children[0].textContent=INFO[k][0];c.children[1].textContent=INFO[k][1];c.style.display='block'}else c.style.display='none'};
+$('#card').onclick=()=>$('#card').style.display='none';
+// ===== Модель: излучение, КПД, мощность =====
+function calc(){
+ const r=Math.PI/180,e=Math.sin((S.t-6)/12*Math.PI)*68; // высота Солнца, °
+ const inc=e>0?Math.max(0,Math.cos((e-(90-S.tilt))*r)):0; // косинус угла падения на панель
+ const G=e>0?1000*Math.pow(Math.sin(e*r),.4)*(1-.75*S.cl/100)*(1-.3*S.dust/100)*inc:0; // Вт/м²
+ const eta=.21*(1-.004*(S.tp-25)),A=S.n*170,p=G*A*eta/1000; // КПД падает с нагревом; 100 строк × n панелей × 1,7 м²
+ const V=G>5?S.n*31*(1-.0028*(S.tp-25))*(.9+.1*Math.min(1,G/600)):0;
+ Object.assign(M,{e,G,eta,A,p,V,I:V?p*1000/V:0});
+}
+// ===== Частицы: фотоны, электроны, дырки =====
+function pair(x,y){const g=geo,nm=g.Y(65),xf=g.fx.reduce((b,f)=>Math.abs(f-x)<Math.abs(b-x)?f:b);
+ ps.push({k:'e',x,y,i:0,pt:[[x,nm],[xf,nm],[xf,g.busY],[g.lampX,g.busY],[g.lampX,g.backY],[g.RX,g.backY]]},{k:'h',x,y})}
+function sim(a){
+ if(!geo||tab!='c'){ps.length=0;return}
+ const g=geo,r=Math.PI/180;
+ if(M.G>3&&ps.length<350){acc+=a*M.G/1000*22;while(acc>=1){acc--;
+  const ang=(S.t<12?1:-1)*Math.min(55,Math.max(8,(90-M.e)*.6))*r,v=240*g.u,L=110*g.u,hx=g.cx+rnd()*g.cw;
+  ps.push({k:'g',x:hx-Math.tan(ang)*L,y:g.sy-L,vx:Math.sin(ang)*v,vy:Math.cos(ang)*v,ang,v,ya:g.Y(70+rnd()*rnd()*98),s:0})}}
+ ps.forEach(p=>{
+  if(p.k=='g'){p.x+=p.vx*a;p.y+=p.vy*a;
+   if(!p.s&&p.y>=g.sy){p.s=1;if(rnd()<.05)ps.push({k:'r',x:p.x,y:g.sy,vx:p.vx*.8,vy:-p.vy*.8,l:1});p.vx=Math.sin(p.ang*.5)*p.v*.8;p.vy=Math.cos(p.ang*.5)*p.v*.8}
+   if(p.y>=p.ya){p.dead=1;fl.push({x:p.x,y:p.y,l:1});pair(p.x,p.y)}}
+  else if(p.k=='r'){p.x+=p.vx*a;p.y+=p.vy*a;p.l-=a*1.1;if(p.l<=0)p.dead=1}
+  else if(p.k=='e'){const q=p.pt[p.i],dx=q[0]-p.x,dy=q[1]-p.y,d=Math.hypot(dx,dy),s=(p.i?170:230)*g.u*a;if(d<=s){p.x=q[0];p.y=q[1];if(++p.i>=p.pt.length)p.dead=1}else{p.x+=dx/d*s;p.y+=dy/d*s}}
+  else{p.y+=60*g.u*a;if(p.y>=g.Y(175))p.dead=1}});
+ ps=ps.filter(p=>!p.dead);fl=fl.filter(f=>(f.l-=a*2)>0);
+}
+// ===== Рисование: помощники =====
+const hit=(k,x,y,w,h)=>hits.push([k,x,y,w,h]);
+const rr=(x,y,w,h,r)=>{X.beginPath();X.roundRect?X.roundRect(x,y,w,h,r):X.rect(x,y,w,h)};
+function tt(s,x,y,sz=14,al='left',c='#fff'){X.font=`600 ${sz}px "SF Pro Display",Inter,system-ui,sans-serif`;X.textAlign=al;X.fillStyle=c;X.shadowColor='rgba(0,10,40,.8)';X.shadowBlur=6;X.fillText(s,x,y);X.shadowBlur=0}
+function gl(on,x,y,w,h,r=16){if(!on)return;X.save();X.strokeStyle=`rgba(255,210,90,${.65+.35*Math.sin(clock*6)})`;X.lineWidth=3;X.shadowColor='#ffc83d';X.shadowBlur=24;rr(x,y,w,h,r);X.stroke();X.restore()}
+// ===== Фон: небо, Солнце, звёзды, облака =====
+function sky(){
+ const e=M.e,dk=cl01((e+5)/22),du=cl01(1-Math.abs(e-2)/10)*.9,cg=S.cl/100*.5*dk;
+ let tp=C([5,10,32],[50,130,230],dk),hr=C([18,28,66],[160,210,255],dk);
+ tp=C(tp,[90,70,140],du*.6);hr=C(hr,[255,135,60],du);tp=C(tp,[125,135,150],cg);hr=C(hr,[175,180,190],cg);
+ let g=X.createLinearGradient(0,0,0,H*.72);g.addColorStop(0,rgb(tp));g.addColorStop(1,rgb(hr));X.fillStyle=g;X.fillRect(0,0,W,H);
+ if(dk<1){X.fillStyle='#fff';stars.forEach(s=>{X.globalAlpha=(1-dk)*(.4+.6*Math.abs(Math.sin(clock+s[2]*20)));X.fillRect(s[0]*W,s[1]*H*.6,1.8,1.8)});X.globalAlpha=1}
+ const f=(S.t-6)/12,sx=W*(.08+.84*f),sy=H*.7-Math.sin(f*Math.PI)*H*.55;
+ if(f>-.15&&f<1.15){g=X.createRadialGradient(sx,sy,0,sx,sy,200);g.addColorStop(0,`rgba(255,240,190,${.9*(1-cg)})`);g.addColorStop(.15,'rgba(255,210,110,.5)');g.addColorStop(1,'rgba(255,200,100,0)');X.fillStyle=g;X.fillRect(sx-200,sy-200,400,400);X.fillStyle='#fff7d6';X.beginPath();X.arc(sx,sy,26,0,7);X.fill()}
+ X.fillStyle=`rgba(255,255,255,${.08+.3*dk})`;
+ for(let i=0;i<S.cl/100*9;i++){const x=((i*.173+clock*.004)%1.2-.1)*W,y=H*(.1+(i*.37%.4));for(let k=0;k<4;k++){X.beginPath();X.ellipse(x+k*40,y+(k%2)*8,70,24,0,0,7);X.fill()}}
+}
+// ===== Фон: поле, ряды панелей в перспективе, тени =====
+function ground(){
+ const dk=cl01((M.e+5)/22),hy=H*.7,fs=(S.t-12)/6;
+ const g=X.createLinearGradient(0,hy,0,H);g.addColorStop(0,rgb(C([8,16,24],[52,104,70],dk)));g.addColorStop(1,rgb(C([2,6,10],[20,56,36],dk)));X.fillStyle=g;X.fillRect(0,hy,W,H-hy);
+ for(let r=0;r<5;r++){const s=.4+r*.28,y=hy+(H-hy)*(.06+r*.17),pw=100*s,ph=(10+40*S.tilt/90)*s;
+  const pg=X.createLinearGradient(0,y-ph,0,y);pg.addColorStop(0,rgb(C([20,40,100],[120,180,240],dk*.85)));pg.addColorStop(1,rgb(C([8,18,50],[30,70,150],dk)));
+  for(let x=-pw+(r*37)%pw;x<W;x+=pw*1.12){
+   if(M.e>0){X.fillStyle=`rgba(0,0,0,${.25*dk})`;const o=-fs*ph*1.6;X.beginPath();X.moveTo(x,y);X.lineTo(x+pw,y);X.lineTo(x+pw+o,y+ph*.8);X.lineTo(x+o,y+ph*.8);X.fill()}
+   X.fillStyle=pg;X.beginPath();X.moveTo(x+pw*.04,y-ph);X.lineTo(x+pw*.96,y-ph);X.lineTo(x+pw,y);X.lineTo(x,y);X.fill();X.strokeStyle='rgba(255,255,255,.35)';X.lineWidth=1;X.stroke()}}
+}
+// ===== Кристалл кремния крупно (шаг 3) =====
+function lattice(lx,ly,lw,lh){
+ X.fillStyle='rgba(8,20,60,.5)';rr(lx,ly,lw,lh,22);X.fill();X.strokeStyle='rgba(255,255,255,.35)';X.lineWidth=1.5;X.stroke();hit('lat',lx,ly,lw,lh);gl(step==3,lx,ly,lw,lh,22);
+ tt('Кристалл кремния (крупно)',lx+16,ly+26,15);
+ const at=(i,j)=>[lx+lw*(.1+.8*i/5),ly+lh*(.25+.6*j/3)],ph=(clock%4)/4,A=at(2,1),B=at(3,1),m=[(A[0]+B[0])/2,A[1]];
+ for(let j=0;j<4;j++)for(let i=0;i<6;i++)[[1,0],[0,1]].forEach(([di,dj])=>{
+  if(i+di>5||j+dj>3||(i==2&&j==1&&di==1&&ph>.25))return;const p=at(i,j),q=at(i+di,j+dj);
+  X.strokeStyle='rgba(190,215,255,.5)';X.lineWidth=2;X.beginPath();X.moveTo(p[0],p[1]);X.lineTo(q[0],q[1]);X.stroke();
+  X.fillStyle='#7be9ff';X.beginPath();X.arc((p[0]+q[0])/2,(p[1]+q[1])/2,3,0,7);X.fill()});
+ for(let j=0;j<4;j++)for(let i=0;i<6;i++){const p=at(i,j),g=X.createRadialGradient(p[0]-4,p[1]-4,1,p[0],p[1],15);g.addColorStop(0,'#cfe0ff');g.addColorStop(1,'#3a5aa0');X.fillStyle=g;X.beginPath();X.arc(p[0],p[1],14,0,7);X.fill();if(labels)tt('Si',p[0],p[1]+4,11,'center','#0b1b44')}
+ if(ph<.22){const u=ph/.22,f0=Math.max(0,u-.2);X.strokeStyle='#ffd447';X.lineWidth=3.5;X.shadowColor='#ffb300';X.shadowBlur=14;X.beginPath();X.moveTo(mx(lx+24,A[0],f0),mx(ly+50,A[1],f0));X.lineTo(mx(lx+24,A[0],u),mx(ly+50,A[1],u));X.stroke();X.shadowBlur=0}
+ else if(ph<.42){const f=1-(ph-.22)/.2,g=X.createRadialGradient(A[0],A[1],0,A[0],A[1],50);g.addColorStop(0,`rgba(255,250,190,${f})`);g.addColorStop(1,'rgba(255,200,80,0)');X.fillStyle=g;X.fillRect(A[0]-50,A[1]-50,100,100)}
+ if(ph>=.25){const u=(ph-.25)/.7,ex=m[0]+u*lw*.2,ey=m[1]-u*lh*.28-Math.sin(u*9)*4;
+  X.save();X.shadowColor='#38d9ff';X.shadowBlur=14;X.fillStyle='#5ee7ff';X.beginPath();X.arc(ex,ey,6,0,7);X.fill();X.restore();
+  X.strokeStyle='#ffa24a';X.lineWidth=2.5;X.fillStyle='rgba(255,160,60,.35)';X.beginPath();X.arc(m[0],m[1],7,0,7);X.fill();X.stroke();
+  if(labels){tt('e⁻',ex+10,ey-6,14,'left','#7fe4ff');tt('дырка +',m[0]-8,m[1]+28,13,'center','#ffb36b')}}
+}
+// ===== Цепочка: ячейка → панель → строка → инвертор → трансформатор → сеть =====
+function chain(ax,ay,aw,ah){
+ const gap=34,bw=(aw-40-gap*5)/6,bh=64,y=ay+ah-bh-14;
+ [['cell','Ячейка','≈ 0,6 В'],['panel','Панель','≈ 31 В'],['string','Строка',M.V.toFixed(0)+' В'],['inv','Инвертор',''],['trans','Трансформатор','↑ напряжение'],['grid','Сеть','~ 50 Гц']].forEach(([k,n,sub],i)=>{
+  const x=ax+20+i*(bw+gap),yc=y+bh/2;
+  X.fillStyle='rgba(255,255,255,.14)';rr(x,y,bw,bh,16);X.fill();X.strokeStyle='rgba(255,255,255,.45)';X.lineWidth=1.5;X.stroke();hit(k,x,y,bw,bh);gl(step==6,x,y,bw,bh);
+  tt(n,x+bw/2,y+24,16,'center');
+  if(k=='inv'){const x0=x+30,x1=x+bw-30,h=(x0+x1)/2,amp=4+8*cl01(M.p/800);tt('DC',x+8,y+bh-10,11);tt('AC',x+bw-8,y+bh-10,11,'right');
+   X.strokeStyle='#7fe4ff';X.lineWidth=2;X.beginPath();for(let px=x0;px<=x1;px+=3){const yy=y+bh-14+(px<h?0:(M.p>1?amp:0)*Math.sin((px-h)*.25-clock*8));px==x0?X.moveTo(px,yy):X.lineTo(px,yy)}X.stroke()}
+  else tt(sub,x+bw/2,y+bh-12,13,'center','#ffd36b');
+  if(i<5){const x1=x+bw+5,x2=x+bw+gap-6;X.strokeStyle='#ffd36b';X.lineWidth=2.5;X.beginPath();X.moveTo(x1,yc);X.lineTo(x2,yc);X.moveTo(x2-6,yc-5);X.lineTo(x2,yc);X.lineTo(x2-6,yc+5);X.stroke();
+   if(M.p>1){X.fillStyle='#fff';X.beginPath();X.arc(mx(x1,x2,(clock*.8+i*.3)%1),yc,3,0,7);X.fill()}}});
+}
+// ===== Вкладка «Панель» =====
+function cellView(ax,ay,aw,ah){
+ const u=.8+.6*cl01((ah-300)/420),cx=ax+150,cw=aw*.42,sy=ay+ah*.22,RX=cx+cw,Y=v=>sy+v*u,busY=Y(36),backY=Y(175),lampX=RX+46,lampY=(busY+backY)/2,Jy=Y(78);
+ const fx=[...Array(6)].map((_,i)=>cx+cw*(i+.5)/6);geo={cx,cw,u,sy,Y,fx,busY,backY,lampX,RX};
+ let ly=-9e9; // слои: ключ, подпись, верх, низ, цвета
+ [['glass','Защитное стекло',0,30,'#c9ecff','#86bdea'],['eva','Плёнка EVA',30,44,'#ffeab0','#e8c870'],['arc','Просветляющее покрытие',44,52,'#35b0c9','#1f7f9a'],['n','n‑кремний',52,78,'#4a86e0','#3466b8'],['p','p‑кремний',78,168,'#a14a55','#6e2b3d'],['back','Задний контакт',168,182,'#d9dde4','#8f97a3']].forEach(([k,nm,a,b,c1,c2])=>{
+  const g=X.createLinearGradient(0,Y(a),0,Y(b));g.addColorStop(0,c1);g.addColorStop(1,c2);
+  X.globalAlpha=k=='glass'||k=='eva'?.75:1;X.fillStyle=g;X.fillRect(cx,Y(a),cw,Y(b)-Y(a));X.globalAlpha=1;hit(k,cx,Y(a),cw,Y(b)-Y(a));
+  if(labels){const m=Y((a+b)/2),yy=Math.max(ly+17,m+4);ly=yy;tt(nm,cx-14,yy,13,'right');X.strokeStyle='rgba(255,255,255,.5)';X.lineWidth=1;X.beginPath();X.moveTo(cx-10,yy-4);X.lineTo(cx,m);X.stroke()}});
+ const gg=X.createLinearGradient(cx,0,cx+cw,0);gg.addColorStop(0,'rgba(255,255,255,.35)');gg.addColorStop(.5,'rgba(255,255,255,0)');gg.addColorStop(1,'rgba(255,255,255,.2)');X.fillStyle=gg;X.fillRect(cx,Y(0),cw,30*u); // блик на стекле
+ gl(step==1,cx-4,Y(0)-4,cw+8,52*u+8);gl(step==2,cx-6,Y(0)-6,cw+12,182*u+12);
+ // контакты-шины, провода, лампа
+ X.fillStyle='#eef1f6';fx.forEach(x=>{X.fillRect(x-4*u,Y(34),8*u,11*u);hit('finger',x-7*u,Y(32),14*u,15*u)});
+ X.save();X.strokeStyle='#f0b46a';X.lineWidth=3;if(step==5){X.shadowColor='#ffc83d';X.shadowBlur=18}
+ X.beginPath();X.moveTo(fx[0],busY);X.lineTo(lampX,busY);X.lineTo(lampX,backY);X.lineTo(RX,backY);X.stroke();X.restore();
+ const b=M.p>1?cl01(M.p/Math.max(S.load,50)):0,lg=X.createRadialGradient(lampX,lampY,2,lampX,lampY,18*u);
+ lg.addColorStop(0,`rgba(255,250,200,${.25+.75*b})`);lg.addColorStop(1,`rgba(255,190,50,${.2+.6*b})`);
+ X.save();X.shadowColor='#ffe58a';X.shadowBlur=45*b;X.fillStyle=lg;X.beginPath();X.arc(lampX,lampY,16*u,0,7);X.fill();X.strokeStyle='#fff';X.lineWidth=2;X.stroke();X.restore();
+ hit('lamp',lampX-20*u,lampY-20*u,40*u,40*u);gl(step==5,lampX-24*u,lampY-24*u,48*u,48*u,24*u);
+ // p-n переход и поле E
+ X.save();X.strokeStyle='#fff';X.globalAlpha=.55+.35*Math.sin(clock*4);X.lineWidth=2;X.setLineDash([7,5]);if(step==4){X.shadowColor='#fff';X.shadowBlur=20}X.beginPath();X.moveTo(cx,Jy);X.lineTo(RX,Jy);X.stroke();X.restore();hit('pn',cx,Jy-8*u,cw,16*u);
+ X.strokeStyle=`rgba(255,255,255,${step==4?.9:.25})`;X.lineWidth=2;
+ for(let i=0;i<7;i++){const x=cx+cw*(i+.5)/7;X.beginPath();X.moveTo(x,Jy-12*u);X.lineTo(x,Jy+14*u);X.moveTo(x-4*u,Jy+8*u);X.lineTo(x,Jy+14*u);X.lineTo(x+4*u,Jy+8*u);X.stroke()}
+ gl(step==4,cx-6,Jy-24*u,cw+12,48*u);
+ // частицы
+ ps.forEach(p=>{
+  if(p.k=='g'||p.k=='r'){X.strokeStyle=p.k=='r'?`rgba(255,240,180,${p.l})`:'#ffd447';X.lineWidth=2.4;X.shadowColor='#ffb300';X.shadowBlur=10;X.beginPath();X.moveTo(p.x,p.y);X.lineTo(p.x-p.vx*.05,p.y-p.vy*.05);X.stroke()}
+  else{X.shadowBlur=12;X.shadowColor=p.k=='e'?'#38d9ff':'#ff9a3c';X.fillStyle=p.k=='e'?'#5ee7ff':'#ff9a3c';X.beginPath();X.arc(p.x,p.y,4*u,0,7);X.fill()}});X.shadowBlur=0;
+ fl.forEach(f=>{X.fillStyle=`rgba(255,250,190,${f.l*.8})`;X.beginPath();X.arc(f.x,f.y,(30-f.l*20)*u,0,7);X.fill()});
+ if(labels){tt('p‑n переход · поле E ↓',cx+cw/2,Jy+30*u,13,'center');tt('− (n)',RX+10,busY-8,14,'left','#7fe4ff');tt('+ (p)',RX+10,backY+22,14,'left','#ffb36b');tt('I ↑',lampX+22*u,lampY-4,13);tt('e⁻ ↓',lampX+22*u,lampY+16,13,'left','#7fe4ff');if(step==1)tt('↩ отражается ~4 % света',cx,sy-12,13)}
+ const lx=ax+aw*.67,lw=aw*.33-24,ly2=ay+16,lh=ah*.5;lattice(lx,ly2,lw,lh);
+ tt(`P = G·A·η = ${M.G.toFixed(0)} Вт/м² × ${M.A} м² × ${(M.eta*100).toFixed(1)} %`,lx,ly2+lh+30,14);
+ chain(ax,ay,aw,ah);
+}
+// ===== Вкладка «Накопитель»: цикл известняка =====
+function storeView(ax,ay,aw,ah){
+ const x=cl01(E/CAP),chg=M.chg,dis=M.dis,hot=cl01((Tr-150)/750);
+ const rx=ax+aw*.05,ry=ay+ah*.14,rw=aw*.26,rh=ah*.66,cx0=rx+14,cy0=ry+64,cw0=rw-28,ch0=rh-96;
+ let g=X.createLinearGradient(rx,0,rx+rw,0);g.addColorStop(0,'#6b7a90');g.addColorStop(.5,'#3b475a');g.addColorStop(1,'#59677c');
+ X.fillStyle=g;rr(rx,ry,rw,rh,26);X.fill();hit('reac',rx,ry+60,rw,rh-60);hit('hx',rx,ry,rw,60);
+ X.fillStyle='#1b1210';rr(cx0,cy0,cw0,ch0,14);X.fill();
+ chunks.forEach(([px,py,sz,rt],i)=>{ // куски известняка: серые CaCO₃ → светлые CaO, раскаляются
+  const done=i<x*chunks.length,col=done?C([245,240,225],[255,215,120],hot):C([215,215,208],[255,120,50],hot*.8),
+  cx1=cx0+14+px*(cw0-28),cy1=cy0+14+py*(ch0-28),r=sz*cw0;
+  X.save();X.shadowColor=`rgba(255,110,30,${hot})`;X.shadowBlur=26*hot;X.fillStyle=rgb(col);X.beginPath();
+  for(let k=0;k<6;k++){const an=rt+k*1.047,rad=r*(.75+.25*Math.sin(rt*k+i));X.lineTo(cx1+Math.cos(an)*rad,cy1+Math.sin(an)*rad)}X.closePath();X.fill();X.restore()});
+ const zig=(y,amp,col,glow)=>{X.save();X.strokeStyle=col;X.lineWidth=4;if(glow){X.shadowColor=col;X.shadowBlur=18}X.beginPath();for(let i=0;i<=16;i++){const px=mx(cx0+8,cx0+cw0-8,i/16),py=y+(i%2?amp:-amp);i?X.lineTo(px,py):X.moveTo(px,py)}X.stroke();X.restore()};
+ zig(ry+rh-16,7,chg?'#ff4a1c':'#6b4a3a',chg); // нагреватель
+ zig(ry+34,8,dis?'#ffb347':'#79a8e8',dis);   // теплообменник
+ const py=ry+rh*.4,tx=ax+aw*.42,tw=aw*.12,ty=ry+rh*.12,th=rh*.62;
+ X.lineCap='round';X.strokeStyle='#7d8ba1';X.lineWidth=14;X.beginPath();X.moveTo(rx+rw,py);X.lineTo(tx,py);X.stroke();X.strokeStyle='#1b2433';X.lineWidth=8;X.stroke();
+ if(chg||dis)for(let i=0;i<8;i++){let u=(clock*.5+i/8)%1;if(dis)u=1-u;X.fillStyle='rgba(190,225,255,.9)';X.beginPath();X.arc(mx(rx+rw,tx,u),py,4,0,7);X.fill()}
+ X.fillStyle='rgba(150,190,255,.12)';rr(tx,ty,tw,th,18);X.fill();
+ const lv=th*x;g=X.createLinearGradient(0,ty+th-lv,0,ty+th);g.addColorStop(0,'rgba(160,205,255,.8)');g.addColorStop(1,'rgba(90,140,230,.8)');
+ X.save();rr(tx,ty,tw,th,18);X.clip();X.fillStyle=g;X.fillRect(tx,ty+th-lv,tw,lv);X.restore();
+ X.strokeStyle='rgba(255,255,255,.6)';X.lineWidth=2;rr(tx,ty,tw,th,18);X.stroke();hit('co2',tx,ty,tw,th);
+ if(labels){tt('Теплообменник → пар',rx+rw/2,ry-10,14,'center');tt('Реактор с известняком',rx+rw/2,ry+rh+22,14,'center');tt('Резервуар CO₂',tx+tw/2,ty-10,14,'center');
+  if(chg)tt('⚡ излишек электричества → нагрев',rx+rw/2,ry+rh+44,14,'center','#ffd36b');if(dis)tt('тепло → пар → потребителю',rx+rw/2,ry-30,14,'center','#ffd36b')}
+ // правая зона: статус, молекулы, формула, индикаторы
+ const zx=ax+aw*.6,zw=aw*.37;tt(chg?'ЗАРЯДКА (день): известняк разлагается':dis?'РАЗРЯДКА (ночь): известняк восстанавливается':'Ожидание',zx,ay+ah*.08,16,'left','#ffd36b');
+ const s=chg?(clock*.35)%1:dis?1-(clock*.35)%1:0,sm=s*s*(3-2*s),d=90,
+ at=[['Ca',[0,0],[0,0],17,'#6fa8ff'],['O',[28,0],[28,0],12,'#ff5b5b'],['C',[56,0],[56+d,0],12,'#9aa3b2'],['O',[76,-22],[30+d,0],12,'#ff5b5b'],['O',[76,22],[82+d,0],12,'#ff5b5b']];
+ at.forEach(([l,a,b,r,c])=>{const px=zx+30+mx(a[0],b[0],sm),pyy=ay+ah*.22+mx(a[1],b[1],sm);X.fillStyle=c;X.beginPath();X.arc(px,pyy,r,0,7);X.fill();tt(l,px,pyy+4,11,'center','#0b1b44')});
+ tt('CaCO₃ + тепло → CaO + CO₂↑',zx,ay+ah*.4,21,'left',chg?'#ffd36b':'rgba(255,255,255,.45)');
+ tt('CaO + CO₂ → CaCO₃ + тепло',zx,ay+ah*.4+34,21,'left',dis?'#ff9a6b':'rgba(255,255,255,.45)');
+ const hrs=Math.min(99,E*1000/Math.max(S.load,1));
+ [['Степень превращения (CaCO₃ → CaO)',(x*100|0)+' %',x,'#ffb347'],['Температура реактора',(Tr|0)+' °C',Tr/950,'#ff6a3d'],['Запас энергии',E.toFixed(2)+' МВт·ч',x,'#6ee7a8'],['Работа без солнца',hrs.toFixed(1)+' ч',hrs/24,'#7fd4ff']].forEach(([l,v,f,c],i)=>{
+  const yy=ay+ah*.58+i*ah*.1;tt(l,zx,yy,15);tt(v,zx+zw,yy,17,'right','#ffd36b');X.fillStyle='rgba(255,255,255,.15)';rr(zx,yy+8,zw,9,5);X.fill();X.fillStyle=c;rr(zx,yy+8,Math.max(8,zw*cl01(f)),9,5);X.fill()});
+}
+// ===== Главный цикл =====
+let last=performance.now();
+function tick(now){
+ const dt=paused?0:Math.min(.05,(now-last)/1000);last=now;
+ const a=S.sp?dt*Math.max(S.sp,.3):0,dh=a*.3; // dh — модельные часы
+ clock+=a;const t0=S.t;S.t=(S.t+dh)%24;if(S.t<t0)day=0;
+ calc();const net=M.p-S.load;M.chg=net>1&&E<CAP-.001;M.dis=net<-1&&E>.001;
+ day+=Math.max(0,M.p)*dh;E=cl01((E+(net>0?net*.9:net/.9)*dh/1000)/CAP)*CAP; // излишек → накопитель, дефицит ← накопитель
+ Tr+=((M.chg?900:M.dis?780:200)-Tr)*Math.min(1,a*1.5);
+ if(demo>=0&&!paused){dT-=dt;if(dT<=0){demo++;apply()}}
+ sim(a);
+ set('wt',hm(S.t));set('we',Math.max(0,M.e).toFixed(0)+'°');set('wp',M.p>=1000?(M.p/1000).toFixed(2)+' МВт':M.p.toFixed(0)+' кВт');
+ set('wv',M.V.toFixed(0)+' В / '+M.I.toFixed(0)+' А');set('wn',(M.eta*100).toFixed(1)+' %');set('wd',(day/1000).toFixed(2)+' МВт·ч');set('ws',E.toFixed(2)+' МВт·ч');
+ set('cap',tab=='c'?ST[step-1]:ST[M.dis?7:6]);$('#st').value=S.t;set('vt',hm(S.t));
+ X=bg;sky();ground();X=fg;X.clearRect(0,0,W,H);hits=[];
+ const ax=274,ay=128,aw=W-286,ah=H-236;tab=='c'?cellView(ax,ay,aw,ah):storeView(ax,ay,aw,ah);
+ requestAnimationFrame(tick);
+}
+sync();ui();calc();requestAnimationFrame(tick);
+</script></body></html>
